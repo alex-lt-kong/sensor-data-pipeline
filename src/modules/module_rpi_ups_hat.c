@@ -191,14 +191,15 @@ void *post_collection_init(__attribute__((unused)) const json_object *config) {
 
 int post_collection(void *c_ctx, __attribute__((unused)) void *pc_ctx) {
   struct INA219_Context *ctx = (struct INA219_Context *)c_ctx;
-  time_t t;
+  time_t datetime_now;
   // struct tm *timeinfo;
   char dt_now_str[sizeof("1970-01-01T00:00:00")];
   char dt_eta_str[sizeof("1970-01-01T00:00:00")];
-  time(&t);
-  strftime(dt_now_str, sizeof(dt_now_str), "%Y-%m-%dT%H:%M:%S", localtime(&t));
-  float batt_use_sec =
-      (ctx->batt_percentage_t0 - ctx->batt_percentage) / (t - ctx->t0 + 1);
+  time(&datetime_now);
+  strftime(dt_now_str, sizeof(dt_now_str), "%Y-%m-%dT%H:%M:%S",
+           localtime(&datetime_now));
+  float batt_use_sec = (ctx->batt_percentage_t0 - ctx->batt_percentage) /
+                       (datetime_now - ctx->t0 + 1);
   float hourly_batt_use = 3600.0 * batt_use_sec;
 
   printf("%s, %s, %10.0f, %9.3f, %7.1f%%, %13.1f%%, ", dt_now_str,
@@ -207,12 +208,20 @@ int post_collection(void *c_ctx, __attribute__((unused)) void *pc_ctx) {
   if (batt_use_sec != 0) {
     // If the battery is charging, it is the time until fully charged
     // If the battery is discharging, it is the time until fully depleted.
-    float remaining_batt_hrs = ctx->batt_percentage / batt_use_sec / 3600.0;
-    // printf("%ld, %lf\n", t, t + batt_use_sec);
-    t += ctx->batt_percentage / batt_use_sec;
+    float remaining_batt_hrs;
+    if (ctx->current < 0) {
+      remaining_batt_hrs = ctx->batt_percentage / batt_use_sec / 3600.0;
+      datetime_now += ctx->batt_percentage / batt_use_sec;
+    } else {
+      remaining_batt_hrs =
+          (100 - ctx->batt_percentage) / batt_use_sec / 3600.0 * -1;
+      datetime_now += (100 - ctx->batt_percentage) / batt_use_sec * -1;
+    }
+
     strftime(dt_eta_str, sizeof(dt_eta_str), "%Y-%m-%dT%H:%M:%S",
-             localtime(&t));
-    printf("%15.1f(%s)", remaining_batt_hrs, dt_eta_str);
+             localtime(&datetime_now));
+    printf("%15.1f(%s at %s)", remaining_batt_hrs,
+           ctx->current > 0 ? "Fully charged" : "Depleted", dt_eta_str);
   } else {
     // Mostly due to sampling with small intervals
     printf("%15s", "<NA>");

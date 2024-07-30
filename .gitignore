@@ -82,3 +82,4 @@ _deps
 .cache
 build
 settings.json
+*.log
